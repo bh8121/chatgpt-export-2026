@@ -82,7 +82,7 @@ Also seen: `link`, `finance`, `genui`, `image_group`, `summary`, `link_title`, `
 
 ## Files
 
-- `make_chatgpt_fixture.py`: writes a small synthetic export covering a regenerated answer, an edited question, an edited first question, a missing `current_node`, absent and `null` mappings, a parent-pointer cycle, and a workspace clone.
+- `make_chatgpt_fixture.py`: writes a small synthetic export covering a regenerated answer, an edited question, an edited first question, an early edit whose live branch is shorter than the abandoned one, a missing `current_node`, absent and `null` mappings, a parent-pointer cycle, and a workspace clone. Nodes carry no `children` lists, as in real 2026 exports; `--with-children` adds them back to mimic older exports.
 - `probe_mychatarchive.py`: runs one existing importer's parser against the fixture.
 
 ## License

@@ -1,6 +1,10 @@
 """Build a small, fully synthetic ChatGPT 2026-style export for parser tests.
 
-No real conversation data. Usage:  python make_chatgpt_fixture.py OUT_DIR
+No real conversation data.
+Usage:  python make_chatgpt_fixture.py OUT_DIR [--with-children]
+
+By default nodes carry no "children" list, as in real 2026 exports (0 of 240,291
+nodes had one). --with-children adds the lists back, to mimic older exports.
 
 Layout mirrors the 2026 export:
   conversations-000.json, conversations-001.json   sharded conversation arrays
@@ -15,6 +19,8 @@ Conversations:
   conv-nomap     "mapping" absent        conv-nullmap   "mapping": null
   conv-cycle     corrupt parent pointers forming a loop (must not hang)
   conv-regen-clone  workspace-merge clone of conv-regen (new id, clone-date create_time)
+  conv-edit-long    first question edited after a long exchange: the live branch
+                    (2 messages) is shorter and newer than the abandoned one (12)
 """
 import json
 import sys
@@ -24,6 +30,7 @@ T0 = 1735689600.0  # 2025-01-01T00:00:00Z
 FILE_ID = "file_000000000000000000000001"
 CITE = "\ue200cite\ue202turn0search1\ue201"
 ENT = '\ue200entity\ue202["city","Lisbon",null]\ue201'
+WITH_CHILDREN = "--with-children" in sys.argv[2:]
 
 
 def node(nid, parent, children, role=None, text=None, t=None, parts=None, ctype="text"):
@@ -36,7 +43,10 @@ def node(nid, parent, children, role=None, text=None, t=None, parts=None, ctype=
             "content": {"content_type": ctype,
                         "parts": parts if parts is not None else [text]},
         }
-    return {"id": nid, "message": msg, "parent": parent, "children": children}
+    n = {"id": nid, "message": msg, "parent": parent}
+    if WITH_CHILDREN:
+        n["children"] = children
+    return n
 
 
 def conv(cid, title, mapping, current, t=T0):
@@ -84,6 +94,22 @@ cycle = {
     "y": node("y", "x", ["x"], "assistant", "Loop B.", T0 + 1),
 }
 
+# Six abandoned exchanges, then the first question is edited and answered once.
+# The live branch is newer but shallower, so "deepest recent leaf" heuristics
+# pick the abandoned branch; current_node points at the live one.
+edit_long = {"root": node("root", None, ["old_u0", "new_u0"])}
+_prev = "root"
+for k in range(6):
+    u, a = f"old_u{k}", f"old_a{k}"
+    nxt = [f"old_u{k + 1}"] if k < 5 else []
+    edit_long[u] = node(u, _prev, [a], "user", f"ABANDONED question {k}.", T0 + 10 * k)
+    edit_long[a] = node(a, u, nxt, "assistant", f"ABANDONED answer {k}.", T0 + 10 * k + 5)
+    _prev = a
+edit_long["new_u0"] = node("new_u0", "root", ["new_a0"], "user",
+                           "Rewritten opening question.", T0 + 1000)
+edit_long["new_a0"] = node("new_a0", "new_u0", [], "assistant",
+                           "Answer on the live branch.", T0 + 1005)
+
 shard0 = [
     conv("conv-regen", "Trip plan", regen, "a2_new"),
     conv("conv-edit1", "Edited opener", edit_first, "a1_new"),
@@ -94,6 +120,7 @@ shard0 = [
 shard1 = [
     conv("conv-cycle", "Corrupt", cycle, "x"),
     conv("conv-regen-clone", "Trip plan", regen, "a2_new", t=T0 + 9e6),
+    conv("conv-edit-long", "Edited after a long exchange", edit_long, "new_a0"),
 ]
 
 
